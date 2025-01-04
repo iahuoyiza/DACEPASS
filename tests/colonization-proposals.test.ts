@@ -2,68 +2,91 @@ import { describe, it, expect, beforeEach } from 'vitest'
 
 // Mock the Clarity contract environment
 const mockContractEnv = {
-  claims: new Map(),
-  claimCount: 0,
+  proposals: new Map(),
+  proposalCount: 0,
   caller: 'ST1PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM',
 }
 
 // Mock Clarity functions
-function mintClaim(exoplanetId: string, claimType: string, coordinates: { x: number, y: number }, area: number) {
-  const newClaimId = mockContractEnv.claimCount + 1
-  mockContractEnv.claims.set(newClaimId, {
-    owner: mockContractEnv.caller,
+function submitProposal(exoplanetId: string, description: string, resourceRequirements: Array<{ resource: string, amount: number }>) {
+  const newProposalId = mockContractEnv.proposalCount + 1
+  mockContractEnv.proposals.set(newProposalId, {
+    proposer: mockContractEnv.caller,
     exoplanetId,
-    claimType,
-    coordinates,
-    area
+    description,
+    resourceRequirements,
+    votes: 0,
+    status: 'active'
   })
-  mockContractEnv.claimCount = newClaimId
-  return { ok: newClaimId }
+  mockContractEnv.proposalCount = newProposalId
+  return { ok: newProposalId }
 }
 
-function transferClaim(claimId: number, recipient: string) {
-  const claim = mockContractEnv.claims.get(claimId)
-  if (!claim) return { err: 404 }
-  if (claim.owner !== mockContractEnv.caller) return { err: 403 }
-  claim.owner = recipient
-  mockContractEnv.claims.set(claimId, claim)
+function voteOnProposal(proposalId: number) {
+  const proposal = mockContractEnv.proposals.get(proposalId)
+  if (!proposal) return { err: 404 }
+  if (proposal.status !== 'active') return { err: 403 }
+  proposal.votes += 1
+  mockContractEnv.proposals.set(proposalId, proposal)
   return { ok: true }
 }
 
-describe('Exoplanet NFT Contract', () => {
+function allocateResources(proposalId: number) {
+  const proposal = mockContractEnv.proposals.get(proposalId)
+  if (!proposal) return { err: 404 }
+  if (proposal.status !== 'active') return { err: 403 }
+  if (proposal.votes < 10) return { err: 403 }
+  proposal.status = 'resources-allocated'
+  mockContractEnv.proposals.set(proposalId, proposal)
+  return { ok: true }
+}
+
+describe('Colonization Proposals Contract', () => {
   beforeEach(() => {
-    mockContractEnv.claims.clear()
-    mockContractEnv.claimCount = 0
+    mockContractEnv.proposals.clear()
+    mockContractEnv.proposalCount = 0
   })
   
-  it('should mint a claim successfully', () => {
-    const result = mintClaim('kepler-22b', 'land', { x: 10, y: 20 }, 100)
+  it('should submit a proposal successfully', () => {
+    const result = submitProposal('kepler-22b', 'Test proposal', [{ resource: 'water', amount: 1000 }])
     expect(result).toEqual({ ok: 1 })
-    expect(mockContractEnv.claims.size).toBe(1)
-    expect(mockContractEnv.claims.get(1)).toMatchObject({
+    expect(mockContractEnv.proposals.size).toBe(1)
+    expect(mockContractEnv.proposals.get(1)).toMatchObject({
       exoplanetId: 'kepler-22b',
-      claimType: 'land',
-      coordinates: { x: 10, y: 20 },
-      area: 100
+      description: 'Test proposal',
+      votes: 0,
+      status: 'active'
     })
   })
   
-  it('should transfer a claim successfully', () => {
-    mintClaim('kepler-22b', 'land', { x: 10, y: 20 }, 100)
-    const result = transferClaim(1, 'ST2PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM')
+  it('should vote on a proposal successfully', () => {
+    submitProposal('kepler-22b', 'Test proposal', [{ resource: 'water', amount: 1000 }])
+    const result = voteOnProposal(1)
     expect(result).toEqual({ ok: true })
-    expect(mockContractEnv.claims.get(1)?.owner).toBe('ST2PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM')
+    expect(mockContractEnv.proposals.get(1)?.votes).toBe(1)
   })
   
-  it('should fail to transfer a non-existent claim', () => {
-    const result = transferClaim(999, 'ST2PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM')
+  it('should fail to vote on a non-existent proposal', () => {
+    const result = voteOnProposal(999)
     expect(result).toEqual({ err: 404 })
   })
   
-  it('should fail to transfer a claim not owned by the caller', () => {
-    mintClaim('kepler-22b', 'land', { x: 10, y: 20 }, 100)
-    mockContractEnv.caller = 'ST3PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM'
-    const result = transferClaim(1, 'ST2PQHQKV0RJXZFY1DGX8MNSNYVE3VGZJSRTPGZGM')
+  it('should allocate resources when votes threshold is met', () => {
+    submitProposal('kepler-22b', 'Test proposal', [{ resource: 'water', amount: 1000 }])
+    for (let i = 0; i < 10; i++) {
+      voteOnProposal(1)
+    }
+    const result = allocateResources(1)
+    expect(result).toEqual({ ok: true })
+    expect(mockContractEnv.proposals.get(1)?.status).toBe('resources-allocated')
+  })
+  
+  it('should fail to allocate resources when votes threshold is not met', () => {
+    submitProposal('kepler-22b', 'Test proposal', [{ resource: 'water', amount: 1000 }])
+    voteOnProposal(1)
+    const result = allocateResources(1)
     expect(result).toEqual({ err: 403 })
+    expect(mockContractEnv.proposals.get(1)?.status).toBe('active')
   })
 })
+
