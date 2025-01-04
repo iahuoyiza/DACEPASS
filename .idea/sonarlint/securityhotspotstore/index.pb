@@ -5,3 +5,5 @@ U
 %contracts/colonization-proposals.clar,7/4/74d29b81d7207fc8212c8903671e896c1d9e1bcd
 L
 contracts/exoplanet-nft.clar,1/4/14694d824796d00bb9b7bea1ad63f464ffcd451a
+T
+$tests/colonization-proposals.test.ts,9/9/997290828cd99cd2c2c528e71e2af5569c46d51b
